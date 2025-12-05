@@ -23,7 +23,7 @@ namespace ArkBundleConverterGUI_WPF
         private List<string> _selectedInputFiles = new List<string>();
         private string? _selectedOutputDir = null;
         // Adjust this path as needed, or add logic to find it
-        private string _cliExecutablePath = "ArkAbConverter.exe";
+        private string _cliExecutablePath = "ArkBundleConverter.exe";
 
         public MainWindow()
         {

@@ -7,10 +7,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>True</UseWindowsForms>
+    <ApplicationIcon>Resource\Converter.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ArkAbConverter\ArkBundleConverter.csproj" />
+    <Content Include="Resource\Converter.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ArkBundleConverterCLI\ArkBundleConverterCLI.csproj" />
   </ItemGroup>
 
 </Project>

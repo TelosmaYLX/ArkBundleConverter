@@ -13,12 +13,6 @@
         FontFamily="Segoe UI" 
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
-    <!-- 
-      核心修复 1: 使用 WindowChrome 接管窗口行为 
-      CaptionHeight="40": 定义顶部40px区域为标题栏，支持拖拽。
-      ResizeBorderThickness="6": 定义窗口四周6px范围内支持鼠标拖拽改变大小。
-      GlassFrameThickness="0": 关闭原生毛玻璃效果，避免黑边。
-    -->
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="40" 
                       ResizeBorderThickness="6" 
@@ -51,7 +45,7 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Width" Value="46"/>
             <Setter Property="Height" Value="32"/>
-            <!-- 核心修复 2: 强制允许点击，防止被 WindowChrome 的拖拽区域吞掉点击事件 -->
+            <!--强制允许点击，防止被 WindowChrome 的拖拽区域吞掉点击事件 -->
             <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -164,10 +158,6 @@
         <DropShadowEffect x:Key="WindowShadow" Color="Black" BlurRadius="12" ShadowDepth="4" Opacity="0.15"/>
     </Window.Resources>
 
-    <!-- 
-      核心修复 3: 布局容器处理 
-      当窗口最大化时，我们需要移除 Margin，否则会有丑陋的白边或者阴影占位。
-    -->
     <Grid>
         <Border x:Name="MainBorder" Background="{StaticResource CardBrush}" CornerRadius="8" Effect="{StaticResource WindowShadow}">
             <Border.Style>
@@ -195,11 +185,7 @@
 
                 <!-- 1. Title Bar -->
                 <Border Grid.Row="0" Background="#F1F5F9" CornerRadius="8,8,0,0" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                    <!-- 
-                        修复最大化圆角问题：如果MainBorder变成了直角，TitleBar也得变直角
-                        这里简单处理：当父容器圆角变0时，视觉上这里也会贴边。
-                        为了完美，你也可以给这个Border加DataTrigger，但通常上面的Margin=0处理已经足够。
-                    -->
+                  
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -215,7 +201,6 @@
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,6,0">
                             <Button x:Name="btnMinimize" Content="{StaticResource IconMinimize}" Style="{StaticResource ChromeButtonStyle}" Click="BtnMinimize_Click"/>
-                            <!-- 修复最大化按钮：使用新的 MaximizeButtonStyle -->
                             <Button x:Name="btnMaximize" Style="{StaticResource MaximizeButtonStyle}" Click="BtnMaximize_Click"/>
                             <Button x:Name="btnClose" Content="{StaticResource IconClose}" Style="{StaticResource CloseButtonStyle}" Click="BtnClose_Click"/>
                         </StackPanel>
@@ -293,11 +278,7 @@
                                    FontSize="12" Foreground="#64748B" 
                                    VerticalAlignment="Center" Margin="0,0,4,0"/>
 
-                        <!-- 
-                           Visual Resize Grip (纯视觉元素)
-                           因为使用了 WindowChrome，实际的拖拽逻辑由系统在窗口边缘 (ResizeBorderThickness) 处理。
-                           这个三角形只是为了告诉用户“这里可以拖拽”，它现在完美地位于圆角矩形的内部右下角。
-                        -->
+                        <!-- Visual Resize Grip (纯视觉元素) -->
                         <Path Grid.Column="2" Data="M 10,10 L 4,10 L 10,4 Z" Fill="#CBD5E1" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,5,5" IsHitTestVisible="False"/>
                     </Grid>
                 </Border>
