@@ -30,22 +30,6 @@ namespace ArkBundleConverterGUI_WPF
             InitializeComponent();
             LocateCliExecutable(); // Try to find the CLI tool
             UpdateInputDisplay();
-
-            // Ensure maximize/restore icon is updated when window state changes
-            this.StateChanged += MainWindow_StateChanged;
-        }
-
-        private void MainWindow_StateChanged(object? sender, EventArgs e)
-        {
-            // Maximize → show "还原" icon
-            if (this.WindowState == WindowState.Maximized)
-            {
-                btnMaximize.Content = "🗗"; 
-            }
-            else
-            {
-                btnMaximize.Content = "🗖";  
-            }
         }
 
 
@@ -248,7 +232,7 @@ namespace ArkBundleConverterGUI_WPF
                     {
                         if (args.Data != null)
                         {
-                            Dispatcher.InvokeAsync(() => 
+                            Dispatcher.InvokeAsync(() =>
                             {
                                 LogMessage(args.Data);
                                 UpdateProgressFromLog(args.Data);
@@ -272,7 +256,6 @@ namespace ArkBundleConverterGUI_WPF
                     // Use Invoke to ensure UI updates happen on UI thread immediately
                     Dispatcher.Invoke(() =>
                     {
-                        
                         // 恢复 Start 按钮，允许重复转换
                         btnStart.IsEnabled = true;
                         // Enable OpenOutput only if output dir exists and conversion succeeded
@@ -326,10 +309,7 @@ namespace ArkBundleConverterGUI_WPF
         // Log messages to the TextBox (must be called on UI thread or marshalled)
         private void LogMessage(string message, bool isError = false)
         {
-            // This method assumes it's already called on the UI thread
-            // Or that the caller used Dispatcher.InvokeAsync
-
-            // Optional: Style error messages differently if using RichTextBox
+            // This method assumes it's already called on UI thread or marshalled via Dispatcher
             string prefix = isError ? "[错误] " : "";
             txtLog.AppendText($"{prefix}{message}{Environment.NewLine}");
             txtLog.ScrollToEnd(); // Keep the last line visible
@@ -338,7 +318,6 @@ namespace ArkBundleConverterGUI_WPF
         // Enable/Disable UI controls
         private void SetUIEnabled(bool enabled)
         {
-            // Ensure this runs on the UI thread if called from background
             btnSelectFiles.IsEnabled = enabled;
             btnSelectInputDir.IsEnabled = enabled;
             btnSelectOutputDir.IsEnabled = enabled;
@@ -346,9 +325,7 @@ namespace ArkBundleConverterGUI_WPF
         }
 
         private void txtInputPaths_TextChanged(object sender, TextChangedEventArgs e)
-        {
-
-        }
+        { }
 
         /// <summary>
         /// 拖动标题栏来移动窗口
@@ -363,7 +340,7 @@ namespace ArkBundleConverterGUI_WPF
                 }
                 catch
                 {
-                    // 如果拖动失败，忽略异常
+                    // 忽略拖动失败异常
                 }
             }
         }
@@ -379,7 +356,7 @@ namespace ArkBundleConverterGUI_WPF
             }
             catch
             {
-                // 如果拖动失败，忽略异常
+                // 忽略拖动失败异常
             }
         }
 
@@ -392,7 +369,7 @@ namespace ArkBundleConverterGUI_WPF
         }
 
         /// <summary>
-        /// 最大化/还原按钮
+        /// 最大化/还原按钮（仅保留窗口状态切换逻辑，删除 Content 修改）
         /// </summary>
         private void BtnMaximize_Click(object sender, RoutedEventArgs e)
         {
@@ -404,6 +381,8 @@ namespace ArkBundleConverterGUI_WPF
             {
                 SystemCommands.MaximizeWindow(this);
             }
+
+           
         }
 
         /// <summary>

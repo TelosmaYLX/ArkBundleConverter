@@ -284,7 +284,7 @@
 
                         <!-- Progress Bar -->
                         <Grid Margin="12,0">
-                            <ProgressBar x:Name="progressBar" Height="6" BorderThickness="0" Background="#F1F5F9" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                            <ProgressBar x:Name="progressBar" Height="6" BorderThickness="0" Background="#F1F5F9" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}"/>
                         </Grid>
 
                         <!-- Percentage Text -->
