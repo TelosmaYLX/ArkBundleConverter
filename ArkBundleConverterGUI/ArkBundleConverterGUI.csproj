@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ArkAbConverter\ArkAbConverter.csproj" />
+    <ProjectReference Include="..\ArkAbConverter\ArkBundleConverter.csproj" />
   </ItemGroup>
 
 </Project>
