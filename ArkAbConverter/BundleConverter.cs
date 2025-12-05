@@ -276,11 +276,9 @@ public class BundleConverter
                                 break;
                             case CompressionType.Lz4:
                             case CompressionType.ArkLz4:
-                                Console.WriteLine($"Decompressing Block (Type: {blockCompressionType}, Compressed: {blockInfo.compressedSize}, Uncompressed: {blockInfo.uncompressedSize})");
                                 DecompressCustomLzham(compressedBytes, compressedBytes.Length, uncompressedBytes, (int)blockInfo.uncompressedSize);
                                 break;
                             case CompressionType.Lz4HC:
-                                Console.WriteLine($"Decompressing Block (Type: {blockCompressionType}, Compressed: {blockInfo.compressedSize}, Uncompressed: {blockInfo.uncompressedSize})");
                                 var decoded = LZ4Codec.Decode(compressedBytes, 0, compressedBytes.Length, uncompressedBytes, 0, (int)blockInfo.uncompressedSize);
                                 if (decoded != blockInfo.uncompressedSize) throw new IOException($"Lz4HC decompression error for block.");
                                 break;
@@ -664,6 +662,127 @@ public class BundleConverter
         }
 
         return size;
+    }
+
+    public class BundleMetadata
+    {
+        public string ResourceName { get; set; } = string.Empty;
+        public List<string> Dependencies { get; set; } = new();
+    }
+
+    public BundleMetadata ExtractBundleMetadata(string inputPath)
+    {
+        var metadata = new BundleMetadata();
+        
+        try
+        {
+            using (var reader = new EndianBinaryReader(File.OpenRead(inputPath), EndianType.BigEndian))
+            {
+                string signature = reader.ReadStringToNull();
+                uint version = reader.ReadUInt32();
+                string unityVersion = reader.ReadStringToNull();
+                string unityRevision = reader.ReadStringToNull();
+
+                if (signature != "UnityFS")
+                {
+                    return metadata;
+                }
+
+                Header header = new Header
+                {
+                    signature = signature,
+                    version = version,
+                    unityVersion = unityVersion,
+                    unityRevision = unityRevision
+                };
+                ReadHeader(reader, header);
+
+                long blocksInfoPosition = reader.BaseStream.Position;
+                if (header.version >= 7)
+                {
+                    reader.AlignStream(16);
+                    blocksInfoPosition = reader.BaseStream.Position;
+                }
+
+                byte[] compressedBlocksInfoBytes;
+                if ((header.flags & ArchiveFlags.BlocksInfoAtTheEnd) != 0)
+                {
+                    long currentPos = reader.BaseStream.Position;
+                    reader.BaseStream.Position = reader.BaseStream.Length - header.compressedBlocksInfoSize;
+                    compressedBlocksInfoBytes = reader.ReadBytes((int)header.compressedBlocksInfoSize);
+                    reader.BaseStream.Position = currentPos;
+                }
+                else
+                {
+                    compressedBlocksInfoBytes = reader.ReadBytes((int)header.compressedBlocksInfoSize);
+                }
+
+                MemoryStream blocksInfoUncompressedStream;
+                var blocksInfoCompressionType = (CompressionType)(header.flags & ArchiveFlags.CompressionTypeMask);
+                switch (blocksInfoCompressionType)
+                {
+                    case CompressionType.None:
+                        blocksInfoUncompressedStream = new MemoryStream(compressedBlocksInfoBytes);
+                        break;
+                    case CompressionType.Lz4:
+                    case CompressionType.Lz4HC:
+                        var uncompressedBytes = new byte[header.uncompressedBlocksInfoSize];
+                        var numWrite = LZ4Codec.Decode(compressedBlocksInfoBytes, uncompressedBytes);
+                        if (numWrite != header.uncompressedBlocksInfoSize) return metadata;
+                        blocksInfoUncompressedStream = new MemoryStream(uncompressedBytes);
+                        break;
+                    default:
+                        return metadata;
+                }
+
+                using (var blocksInfoReader = new EndianBinaryReader(blocksInfoUncompressedStream, EndianType.BigEndian))
+                {
+                    blocksInfoReader.ReadBytes(16); // hash
+                    int blocksCount = blocksInfoReader.ReadInt32();
+                    for (int i = 0; i < blocksCount; i++)
+                    {
+                        blocksInfoReader.ReadUInt32(); // uncompressedSize
+                        blocksInfoReader.ReadUInt32(); // compressedSize
+                        blocksInfoReader.ReadUInt16(); // flags
+                    }
+
+                    int nodesCount = blocksInfoReader.ReadInt32();
+                    for (int i = 0; i < nodesCount; i++)
+                    {
+                        blocksInfoReader.ReadInt64(); // offset
+                        blocksInfoReader.ReadInt64(); // size
+                        blocksInfoReader.ReadUInt32(); // flags
+                        string path = blocksInfoReader.ReadStringToNull();
+                        
+                        // Extract CAB name from path (e.g., "CAB-12345678abc")
+                        if (path.Contains("CAB-") && string.IsNullOrEmpty(metadata.ResourceName))
+                        {
+                            var cabMatch = System.Text.RegularExpressions.Regex.Match(path, @"CAB-[A-Fa-f0-9]+");
+                            if (cabMatch.Success)
+                            {
+                                metadata.ResourceName = cabMatch.Value;
+                            }
+                        }
+                        
+                        // Extract dependencies if they exist
+                        if (path.EndsWith(".ab") && path != metadata.ResourceName + ".ab")
+                        {
+                            var fileName = Path.GetFileName(path);
+                            if (!metadata.Dependencies.Contains(fileName))
+                            {
+                                metadata.Dependencies.Add(fileName);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Silently fail and return empty metadata
+        }
+
+        return metadata;
     }
 }
 

@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 // Required if using System.Windows.Forms.FolderBrowserDialog
 using Forms = System.Windows.Forms;
 
@@ -29,7 +30,24 @@ namespace ArkBundleConverterGUI_WPF
             InitializeComponent();
             LocateCliExecutable(); // Try to find the CLI tool
             UpdateInputDisplay();
+
+            // Ensure maximize/restore icon is updated when window state changes
+            this.StateChanged += MainWindow_StateChanged;
         }
+
+        private void MainWindow_StateChanged(object? sender, EventArgs e)
+        {
+            // Maximize → show "还原" icon
+            if (this.WindowState == WindowState.Maximized)
+            {
+                btnMaximize.Content = "🗗"; 
+            }
+            else
+            {
+                btnMaximize.Content = "🗖";  
+            }
+        }
+
 
         private void LocateCliExecutable()
         {
@@ -85,9 +103,6 @@ namespace ArkBundleConverterGUI_WPF
             using (var fbd = new Forms.FolderBrowserDialog())
             {
                 fbd.Description = "选择包含 Bundle 文件的输入目录";
-                // ShowDialog needs a HWND owner in WPF, but passing null often works,
-                // or create a temporary hidden WinForms window as owner if needed.
-                // For simplicity, let's try without explicit owner first.
                 Forms.DialogResult result = fbd.ShowDialog(); // Returns Forms.DialogResult
 
                 if (result == Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(fbd.SelectedPath))
@@ -176,12 +191,39 @@ namespace ArkBundleConverterGUI_WPF
 
             // Prepare UI and start process
             txtLog.Clear();
-            SetUIEnabled(false);
+            progressBar.Value = 0;
+            txtProgress.Text = "0/0 (0%)";
+            // Only disable the Start button to allow user to change selections during conversion
+            btnStart.IsEnabled = false;
+            btnOpenOutput.IsEnabled = false;
             LogMessage("开始执行转换...");
             LogMessage($"命令行: {_cliExecutablePath} {argsBuilder.ToString()}");
 
             // Run process asynchronously
             Task.Run(() => ExecuteCliProcess(argsBuilder.ToString()));
+        }
+
+        private void BtnOpenOutput_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_selectedOutputDir) || !Directory.Exists(_selectedOutputDir))
+            {
+                System.Windows.MessageBox.Show("输出目录无效或不存在。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = _selectedOutputDir,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"无法打开文件夹: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void ExecuteCliProcess(string arguments)
@@ -194,7 +236,7 @@ namespace ArkBundleConverterGUI_WPF
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8, // Match CLI output encoding
+                StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8
             };
 
@@ -202,13 +244,15 @@ namespace ArkBundleConverterGUI_WPF
             {
                 using (Process process = new Process { StartInfo = startInfo })
                 {
-                    // Use lambda expressions to capture context for Dispatcher
                     process.OutputDataReceived += (s, args) =>
                     {
                         if (args.Data != null)
                         {
-                            // Marshal call back to UI thread
-                            Dispatcher.InvokeAsync(() => LogMessage(args.Data));
+                            Dispatcher.InvokeAsync(() => 
+                            {
+                                LogMessage(args.Data);
+                                UpdateProgressFromLog(args.Data);
+                            });
                         }
                     };
                     process.ErrorDataReceived += (s, args) =>
@@ -223,24 +267,59 @@ namespace ArkBundleConverterGUI_WPF
                     process.BeginOutputReadLine();
                     process.BeginErrorReadLine();
 
-                    process.WaitForExit(); // Wait for the process to complete
+                    process.WaitForExit();
 
-                    // Log exit code on UI thread
-                    Dispatcher.InvokeAsync(() =>
+                    // Use Invoke to ensure UI updates happen on UI thread immediately
+                    Dispatcher.Invoke(() =>
                     {
-                        LogMessage($"转换进程已退出，退出码: {process.ExitCode}", process.ExitCode != 0);
-                        SetUIEnabled(true); // Re-enable UI after process finishes
+                        
+                        // 恢复 Start 按钮，允许重复转换
+                        btnStart.IsEnabled = true;
+                        // Enable OpenOutput only if output dir exists and conversion succeeded
+                        bool enableOpen = false;
+                        try
+                        {
+                            enableOpen = process.ExitCode == 0 && !string.IsNullOrEmpty(_selectedOutputDir) && Directory.Exists(_selectedOutputDir);
+                        }
+                        catch { enableOpen = false; }
+                        btnOpenOutput.IsEnabled = enableOpen;
+
+                        // Ensure selection buttons remain enabled so user can change selection
+                        btnSelectFiles.IsEnabled = true;
+                        btnSelectInputDir.IsEnabled = true;
+                        btnSelectOutputDir.IsEnabled = true;
                     });
                 }
             }
             catch (Exception ex)
             {
-                // Log exception on UI thread
-                Dispatcher.InvokeAsync(() =>
+                Dispatcher.Invoke(() =>
                 {
                     LogMessage($"启动或执行转换进程时出错: {ex.Message}", true);
-                    SetUIEnabled(true); // Ensure UI is re-enabled on error
+                    // 发生错误时也允许重试
+                    btnStart.IsEnabled = true;
+                    btnSelectFiles.IsEnabled = true;
+                    btnSelectInputDir.IsEnabled = true;
+                    btnSelectOutputDir.IsEnabled = true;
+                    btnOpenOutput.IsEnabled = false;
                 });
+            }
+        }
+
+        private void UpdateProgressFromLog(string logLine)
+        {
+            // Pattern: "进度: X/Y (Z%)"
+            var match = System.Text.RegularExpressions.Regex.Match(logLine, @"进度:\s*(\d+)/(\d+)\s*\((\d+)%\)");
+            if (match.Success)
+            {
+                if (int.TryParse(match.Groups[1].Value, out int current) &&
+                    int.TryParse(match.Groups[2].Value, out int total) &&
+                    int.TryParse(match.Groups[3].Value, out int percentage))
+                {
+                    progressBar.Maximum = total;
+                    progressBar.Value = current;
+                    txtProgress.Text = $"{current}/{total} ({percentage}%)";
+                }
             }
         }
 
@@ -260,7 +339,137 @@ namespace ArkBundleConverterGUI_WPF
         private void SetUIEnabled(bool enabled)
         {
             // Ensure this runs on the UI thread if called from background
+            btnSelectFiles.IsEnabled = enabled;
+            btnSelectInputDir.IsEnabled = enabled;
+            btnSelectOutputDir.IsEnabled = enabled;
+            btnStart.IsEnabled = enabled;
+        }
+
+        private void txtInputPaths_TextChanged(object sender, TextChangedEventArgs e)
+        {
 
         }
+
+        /// <summary>
+        /// 拖动标题栏来移动窗口
+        /// </summary>
+        private void Window_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (e.Source == this)
+            {
+                try
+                {
+                    this.DragMove();
+                }
+                catch
+                {
+                    // 如果拖动失败，忽略异常
+                }
+            }
+        }
+
+        /// <summary>
+        /// 拖动标题栏来移动窗口
+        /// </summary>
+        private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            try
+            {
+                this.DragMove();
+            }
+            catch
+            {
+                // 如果拖动失败，忽略异常
+            }
+        }
+
+        /// <summary>
+        /// 最小化按钮
+        /// </summary>
+        private void BtnMinimize_Click(object sender, RoutedEventArgs e)
+        {
+            SystemCommands.MinimizeWindow(this);
+        }
+
+        /// <summary>
+        /// 最大化/还原按钮
+        /// </summary>
+        private void BtnMaximize_Click(object sender, RoutedEventArgs e)
+        {
+            if (this.WindowState == System.Windows.WindowState.Maximized)
+            {
+                SystemCommands.RestoreWindow(this);
+            }
+            else
+            {
+                SystemCommands.MaximizeWindow(this);
+            }
+        }
+
+        /// <summary>
+        /// 关闭按钮
+        /// </summary>
+        private void BtnClose_Click(object sender, RoutedEventArgs e)
+        {
+            SystemCommands.CloseWindow(this);
+        }
+
+        #region Thumb handlers for inner rounded rectangle resizing
+        private void Thumb_TopLeft_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            double newWidth = this.Width - e.HorizontalChange;
+            double newHeight = this.Height - e.VerticalChange;
+            if (newWidth >= this.MinWidth) { this.Width = newWidth; this.Left += e.HorizontalChange; }
+            if (newHeight >= this.MinHeight) { this.Height = newHeight; this.Top += e.VerticalChange; }
+        }
+
+        private void Thumb_TopRight_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            double newWidth = this.Width + e.HorizontalChange;
+            double newHeight = this.Height - e.VerticalChange;
+            if (newWidth >= this.MinWidth) { this.Width = newWidth; }
+            if (newHeight >= this.MinHeight) { this.Height = newHeight; this.Top += e.VerticalChange; }
+        }
+
+        private void Thumb_BottomLeft_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            double newWidth = this.Width - e.HorizontalChange;
+            double newHeight = this.Height + e.VerticalChange;
+            if (newWidth >= this.MinWidth) { this.Width = newWidth; this.Left += e.HorizontalChange; }
+            if (newHeight >= this.MinHeight) { this.Height = newHeight; }
+        }
+
+        private void Thumb_BottomRight_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            double newWidth = this.Width + e.HorizontalChange;
+            double newHeight = this.Height + e.VerticalChange;
+            if (newWidth >= this.MinWidth) { this.Width = newWidth; }
+            if (newHeight >= this.MinHeight) { this.Height = newHeight; }
+        }
+
+        private void Thumb_Left_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            double newWidth = this.Width - e.HorizontalChange;
+            if (newWidth >= this.MinWidth) { this.Width = newWidth; this.Left += e.HorizontalChange; }
+        }
+
+        private void Thumb_Right_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            double newWidth = this.Width + e.HorizontalChange;
+            if (newWidth >= this.MinWidth) { this.Width = newWidth; }
+        }
+
+        private void Thumb_Top_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            double newHeight = this.Height - e.VerticalChange;
+            if (newHeight >= this.MinHeight) { this.Height = newHeight; this.Top += e.VerticalChange; }
+        }
+
+        private void Thumb_Bottom_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            double newHeight = this.Height + e.VerticalChange;
+            if (newHeight >= this.MinHeight) { this.Height = newHeight; }
+        }
+        #endregion
     }
 }

@@ -19,7 +19,6 @@ public class Program
         // 添加子命令
         rootCommand.AddCommand(CreateUncompressCommand());
         rootCommand.AddCommand(CreateArkLz4Command());
-
         // 解析参数并执行
         return await rootCommand.InvokeAsync(args);
     }
@@ -177,11 +176,11 @@ public class Program
 
         Console.WriteLine($"准备处理 {filesToProcess.Count} 个文件，输出到目录: {outputDir.FullName}");
         Console.WriteLine("转换模式: 无压缩格式");
+        Console.WriteLine();
 
         var converter = new BundleConverter();
         bool hadErrors = false;
 
-        // Determine base input directory to preserve folder structure
         string? baseInputDir = null;
         if (inputDir != null)
         {
@@ -192,60 +191,90 @@ public class Program
             baseInputDir = GetCommonDirectory(filesToProcess);
         }
 
+        int processedCount = 0;
+        int totalCount = filesToProcess.Count;
+        int successCount = 0;
+        int failedCount = 0;
+
         foreach (var inputFile in filesToProcess)
         {
-            Console.WriteLine($"--- 开始处理: {inputFile.Name} ---");
-            if (!inputFile.Exists)
+            try
             {
-                WriteError($"错误: 输入文件不存在: {inputFile.FullName}");
-                hadErrors = true;
-                continue;
-            }
+                // 提取元数据
+                var metadata = converter.ExtractBundleMetadata(inputFile.FullName);
+                string resourceInfo = string.IsNullOrEmpty(metadata.ResourceName) ? "未知资源" : metadata.ResourceName;
+                
+                Console.WriteLine($"已找到: {inputFile.Name}");
+                Console.WriteLine($"资源名: {resourceInfo}");
 
-            string relativePath;
-            if (!string.IsNullOrEmpty(baseInputDir))
-            {
-                try
+                if (!inputFile.Exists)
                 {
-                    relativePath = Path.GetRelativePath(baseInputDir, inputFile.FullName);
+                    WriteError($"错误: 输入文件不存在: {inputFile.FullName}");
+                    hadErrors = true;
+                    failedCount++;
+                    processedCount++;
+                    PrintProgress(processedCount, totalCount);
+                    continue;
                 }
-                catch
+
+                string relativePath;
+                if (!string.IsNullOrEmpty(baseInputDir))
+                {
+                    try
+                    {
+                        relativePath = Path.GetRelativePath(baseInputDir, inputFile.FullName);
+                    }
+                    catch
+                    {
+                        relativePath = inputFile.Name;
+                    }
+                }
+                else
                 {
                     relativePath = inputFile.Name;
                 }
-            }
-            else
-            {
-                relativePath = inputFile.Name;
-            }
 
-            string relativeDir = Path.GetDirectoryName(relativePath) ?? string.Empty;
-            string outputDirForFile = string.IsNullOrEmpty(relativeDir) ? outputDir.FullName : Path.Combine(outputDir.FullName, relativeDir);
+                string relativeDir = Path.GetDirectoryName(relativePath) ?? string.Empty;
+                string outputDirForFile = string.IsNullOrEmpty(relativeDir) ? outputDir.FullName : Path.Combine(outputDir.FullName, relativeDir);
 
-            try
-            {
-                // 确保输出文件夹存在
-                if (!Directory.Exists(outputDirForFile)) Directory.CreateDirectory(outputDirForFile);
+                try
+                {
+                    // 确保输出文件夹存在
+                    if (!Directory.Exists(outputDirForFile)) Directory.CreateDirectory(outputDirForFile);
 
-                string outputFileName = Path.ChangeExtension(Path.GetFileName(relativePath), ".uncompressed.ab");
-                string outputPath = Path.Combine(outputDirForFile, outputFileName);
+                    string outputFileName = Path.ChangeExtension(Path.GetFileName(relativePath), ".uncompressed.ab");
+                    string outputPath = Path.Combine(outputDirForFile, outputFileName);
 
-                converter.ConvertToUncompressed(inputFile.FullName, outputPath);
+                    converter.ConvertToUncompressed(inputFile.FullName, outputPath);
 
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"成功转换: {inputFile.Name} -> {Path.GetRelativePath(outputDir.FullName, outputPath)}");
-                Console.ResetColor();
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"✓ 成功转换: {inputFile.Name} -> {outputFileName}");
+                    Console.ResetColor();
+                    successCount++;
+                }
+                catch (Exception ex)
+                {
+                    WriteError($"处理文件 '{inputFile.Name}' 时发生错误: {ex.Message}");
+                    hadErrors = true;
+                    failedCount++;
+                }
             }
             catch (Exception ex)
             {
-                WriteError($"处理文件 '{inputFile.Name}' 时发生错误: {ex.Message}");
+                WriteError($"处理文件 '{inputFile.Name}' 时发生异常: {ex.Message}");
                 hadErrors = true;
+                failedCount++;
             }
-            Console.WriteLine($"--- 完成处理: {inputFile.Name} ---");
-            Console.WriteLine();
+            finally
+            {
+                processedCount++;
+                PrintProgress(processedCount, totalCount);
+                Console.WriteLine();
+            }
         }
 
-        Console.WriteLine("所有文件处理完毕。");
+        // Summary
+        Console.WriteLine($"共发现{totalCount}个可转换文件，{successCount}个文件转换成功，{failedCount}个文件转换失败");
         return hadErrors ? 1 : 0;
     }
 
@@ -264,11 +293,11 @@ public class Program
 
         Console.WriteLine($"准备处理 {filesToProcess.Count} 个文件，输出到目录: {outputDir.FullName}");
         Console.WriteLine("转换模式: Ark LZ4 压缩格式");
+        Console.WriteLine();
 
         var converter = new BundleConverter();
         bool hadErrors = false;
 
-        //确定输入文件夹结构
         string? baseInputDir = null;
         if (inputDir != null)
         {
@@ -279,61 +308,101 @@ public class Program
             baseInputDir = GetCommonDirectory(filesToProcess);
         }
 
+        int processedCount = 0;
+        int totalCount = filesToProcess.Count;
+        int successCount = 0;
+        int failedCount = 0;
+
         foreach (var inputFile in filesToProcess)
         {
-            Console.WriteLine($"--- 开始处理: {inputFile.Name} ---");
-            if (!inputFile.Exists)
+            try
             {
-                WriteError($"错误: 输入文件不存在: {inputFile.FullName}");
-                hadErrors = true;
-                continue;
-            }
+                // 提取元数据
+                var metadata = converter.ExtractBundleMetadata(inputFile.FullName);
+                string resourceInfo = string.IsNullOrEmpty(metadata.ResourceName) ? "未知资源" : metadata.ResourceName;
+                
+                Console.WriteLine($"已找到: {inputFile.Name}");
+                Console.WriteLine($"  资源名: {resourceInfo}");
 
-            string relativePath;
-            if (!string.IsNullOrEmpty(baseInputDir))
-            {
-                try
+                if (!inputFile.Exists)
                 {
-                    relativePath = Path.GetRelativePath(baseInputDir, inputFile.FullName);
+                    WriteError($"错误: 输入文件不存在: {inputFile.FullName}");
+                    hadErrors = true;
+                    failedCount++;
+                    processedCount++;
+                    PrintProgress(processedCount, totalCount);
+                    continue;
                 }
-                catch
+
+                string relativePath;
+                if (!string.IsNullOrEmpty(baseInputDir))
+                {
+                    try
+                    {
+                        relativePath = Path.GetRelativePath(baseInputDir, inputFile.FullName);
+                    }
+                    catch
+                    {
+                        relativePath = inputFile.Name;
+                    }
+                }
+                else
                 {
                     relativePath = inputFile.Name;
                 }
-            }
-            else
-            {
-                relativePath = inputFile.Name;
-            }
 
-            string relativeDir = Path.GetDirectoryName(relativePath) ?? string.Empty;
-            string outputDirForFile = string.IsNullOrEmpty(relativeDir) ? outputDir.FullName : Path.Combine(outputDir.FullName, relativeDir);
+                string relativeDir = Path.GetDirectoryName(relativePath) ?? string.Empty;
+                string outputDirForFile = string.IsNullOrEmpty(relativeDir) ? outputDir.FullName : Path.Combine(outputDir.FullName, relativeDir);
 
-            try
-            {
-                // Ensure output directory exists
-                if (!Directory.Exists(outputDirForFile)) Directory.CreateDirectory(outputDirForFile);
+                try
+                {
+                    // Ensure output directory exists
+                    if (!Directory.Exists(outputDirForFile)) Directory.CreateDirectory(outputDirForFile);
 
-                string outputFileName = Path.ChangeExtension(Path.GetFileName(relativePath), ".arklz4.ab");
-                string outputPath = Path.Combine(outputDirForFile, outputFileName);
+                    string outputFileName = Path.ChangeExtension(Path.GetFileName(relativePath), ".arklz4.ab");
+                    string outputPath = Path.Combine(outputDirForFile, outputFileName);
 
-                converter.ConvertToArkLz4(inputFile.FullName, outputPath);
+                    converter.ConvertToArkLz4(inputFile.FullName, outputPath);
 
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"成功转换: {inputFile.Name} -> {Path.GetRelativePath(outputDir.FullName, outputPath)}");
-                Console.ResetColor();
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"✓ 成功转换: {inputFile.Name} -> {outputFileName}");
+                    Console.ResetColor();
+                    successCount++;
+                }
+                catch (Exception ex)
+                {
+                    WriteError($"处理文件 '{inputFile.Name}' 时发生错误: {ex.Message}");
+                    hadErrors = true;
+                    failedCount++;
+                }
             }
             catch (Exception ex)
             {
-                WriteError($"处理文件 '{inputFile.Name}' 时发生错误: {ex.Message}");
+                WriteError($"处理文件 '{inputFile.Name}' 时发生异常: {ex.Message}");
                 hadErrors = true;
+                failedCount++;
             }
-            Console.WriteLine($"--- 完成处理: {inputFile.Name} ---");
-            Console.WriteLine();
+            finally
+            {
+                processedCount++;
+                PrintProgress(processedCount, totalCount);
+                Console.WriteLine();
+            }
         }
 
-        Console.WriteLine("所有文件处理完毕。");
+        // Summary
+        Console.WriteLine($"共发现{totalCount}个可转换文件，{successCount}个文件转换成功，{failedCount}个文件转换失败");
         return hadErrors ? 1 : 0;
+    }
+
+    /// <summary>
+    /// 打印进度信息
+    /// </summary>
+    private static void PrintProgress(int completed, int total)
+    {
+        int percentage = total > 0 ? (completed * 100) / total : 0;
+        Console.WriteLine($"进度: {completed}/{total} ({percentage}%)");
+        Console.Out.Flush();
     }
 
     /// <summary>
