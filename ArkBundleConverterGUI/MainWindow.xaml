@@ -5,53 +5,164 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ArkBundleConverterGUI_WPF"
         mc:Ignorable="d"
-        Title="Bundle Converter GUI(Only supports Ark ab files of ver 25.04)" Height="550" Width="600" MinHeight="400" MinWidth="450">
-    <Grid Margin="10">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <!-- Input Selection Row -->
-            <RowDefinition Height="Auto"/>
-            <!-- Output Selection Row -->
-            <RowDefinition Height="Auto"/>
-            <!-- Start Button Row -->
-            <RowDefinition Height="Auto"/>
-            <!-- Log Label Row -->
-            <RowDefinition Height="*"/>
-            <!-- Log TextBox Row (takes remaining space) -->
-        </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <!-- Labels -->
-            <ColumnDefinition Width="*"/>
-            <!-- TextBoxes -->
-            <ColumnDefinition Width="Auto"/>
-            <!-- Buttons -->
-        </Grid.ColumnDefinitions>
+        Title="Bundle Converter" Height="560" Width="700" MinHeight="420" MinWidth="500"
+        Background="{DynamicResource WindowBackgroundBrush}" FontFamily="Segoe UI">
 
-        <!-- Input Selection -->
-        <Label Grid.Row="0" Grid.Column="0" Content="输入源:" VerticalAlignment="Top" Margin="0,5,5,0"/>
-        <TextBox x:Name="txtInputPaths" Grid.Row="0" Grid.Column="1" Margin="0,5,5,5" IsReadOnly="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" MaxHeight="100" Text="(未选择)" VerticalContentAlignment="Top"/>
-        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Vertical" VerticalAlignment="Top" Margin="0,5,0,0">
-            <Button x:Name="btnSelectFiles" Content="选择文件..." Margin="0,0,0,5" Padding="5,2" Click="BtnSelectFiles_Click"/>
-            <Button x:Name="btnSelectInputDir" Content="选择目录..." Padding="5,2" Click="BtnSelectInputDir_Click"/>
-        </StackPanel>
+    <Window.Resources>
+        <!-- Palette -->
+        <Color x:Key="PrimaryColor">#FF1E293B</Color>
+        <Color x:Key="AccentColor">#FF3B82F6</Color>
+        <Color x:Key="CardColor">#FFF8FAFC</Color>
+        <Color x:Key="SubtleText">#FF6B7280</Color>
+        <Color x:Key="WindowBackground">#FFF3F4F6</Color>
 
-        <!-- Output Selection -->
-        <Label Grid.Row="1" Grid.Column="0" Content="输出目录:" VerticalAlignment="Center" Margin="0,5,5,0"/>
-        <TextBox x:Name="txtOutputDir" Grid.Row="1" Grid.Column="1" Margin="0,5,5,5" IsReadOnly="True" Text="(未选择)" VerticalContentAlignment="Center"/>
-        <Button x:Name="btnSelectOutputDir" Grid.Row="1" Grid.Column="2" Content="选择输出目录..." Padding="5,2" VerticalAlignment="Center" Margin="0,5,0,5" Click="BtnSelectOutputDir_Click"/>
+        <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+        <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}"/>
+        <SolidColorBrush x:Key="SubtleTextBrush" Color="{StaticResource SubtleText}"/>
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource WindowBackground}"/>
 
-        <!-- Start Button -->
-        <Button x:Name="btnStart" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Content="开始转换" Margin="0,15,0,10" Padding="10,5" HorizontalAlignment="Center" FontWeight="Bold" Click="BtnStart_Click"/>
+        <!-- Button style -->
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="8" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,2"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="root" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Background" Value="#FFD1D5DB"/>
+                                <Setter Property="Foreground" Value="#FF7C7C7C"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-        <!-- Log Output -->
-        <Label Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Content="日志:" Margin="0,5,0,2"/>
-        <TextBox x:Name="txtLog" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
-                 IsReadOnly="True"
-                 AcceptsReturn="True"
-                 TextWrapping="Wrap"
-                 VerticalScrollBarVisibility="Auto"
-                 FontFamily="Consolas" Margin="0,0,0,0"/>
+        <!-- Secondary (outline) button -->
+        <Style x:Key="OutlineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#FFE5E7EB"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,2"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="root" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
+        <!-- TextBox style -->
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="BorderBrush" Value="#FFE5E7EB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Label style -->
+        <Style TargetType="Label">
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- Card shadow -->
+        <DropShadowEffect x:Key="CardShadow" Color="#44000000" BlurRadius="10" ShadowDepth="2"/>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Border Background="{StaticResource CardBrush}" CornerRadius="12" Padding="18" Effect="{StaticResource CardShadow}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Header -->
+                <StackPanel Grid.Row="0" Grid.ColumnSpan="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
+                    <TextBlock Text="Arknights Bundle Converter" FontSize="20" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}"/>
+                    <TextBlock Text="  " />
+                    <TextBlock Text="by MigitaRin" Foreground="{StaticResource SubtleTextBrush}" VerticalAlignment="Bottom" Margin="6,0,0,2"/>
+                </StackPanel>
+
+                <!-- Input Selection -->
+                <Label Grid.Row="1" Grid.Column="0" Content="输入源:" VerticalAlignment="Top" Margin="0,4,10,0" FontSize="14"/>
+                <TextBox x:Name="txtInputPaths" Grid.Row="1" Grid.Column="1" Margin="0,4,10,4" IsReadOnly="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" MaxHeight="110" Text="(未选择)" VerticalContentAlignment="Top"/>
+                <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Vertical" VerticalAlignment="Top">
+                    <Button x:Name="btnSelectFiles" Content="选择文件" Margin="0,0,0,8" Padding="10,6" Click="BtnSelectFiles_Click" Style="{StaticResource OutlineButton}" FontSize="14"/>
+                    <Button x:Name="btnSelectInputDir" Content="选择目录" Padding="10,6" Click="BtnSelectInputDir_Click" Style="{StaticResource OutlineButton}" FontSize="14"/>
+                </StackPanel>
+
+                <!-- Output Selection -->
+                <Label Grid.Row="2" Grid.Column="0" Content="输出目录:" VerticalAlignment="Center" Margin="0,6,10,0" FontSize="14"/>
+                <TextBox x:Name="txtOutputDir" Grid.Row="2" Grid.Column="1" Margin="0,6,10,4" IsReadOnly="True" Text="(未选择)" VerticalContentAlignment="Center"/>
+                <Button x:Name="btnSelectOutputDir" Grid.Row="2" Grid.Column="2" Content="选择输出目录" Padding="10,6" VerticalAlignment="Center" Margin="0,6,0,4" Click="BtnSelectOutputDir_Click" Style="{StaticResource OutlineButton}" FontSize="14"/>
+
+                <!-- Start and Mode -->
+                <StackPanel Grid.Row="3" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,12">
+                    <Button x:Name="btnStart" Content="开始转换" Width="126" Padding="12,8" FontSize="18" FontWeight="Bold" Click="BtnStart_Click" Style="{StaticResource PrimaryButtonStyle}" Height="34"/>
+
+                    <!-- Mode selection -->
+                </StackPanel>
+
+                <!-- Log Output -->
+                <Label Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Content="日志:" Margin="0,4,0,6" FontSize="14"/>
+                <TextBox x:Name="txtLog" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" Height="220"/>
+
+            </Grid>
+        </Border>
     </Grid>
 </Window>
