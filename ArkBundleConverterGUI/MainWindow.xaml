@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ArkBundleConverterGUI_WPF"
+        Title="ArkBundleConverter" 
         mc:Ignorable="d"
         WindowStyle="None" 
         AllowsTransparency="True"
@@ -12,7 +13,13 @@
         Background="Transparent"
         FontFamily="Segoe UI" 
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
+   
+        <!-- 任务栏缩略图标题设置 -->
+        <Window.TaskbarItemInfo>
+            <TaskbarItemInfo Description="Arknights Bundle Converter" />
+        </Window.TaskbarItemInfo>
 
+     
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="40" 
                       ResizeBorderThickness="6" 
