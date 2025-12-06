@@ -242,7 +242,7 @@ public class Program
                     // 确保输出文件夹存在
                     if (!Directory.Exists(outputDirForFile)) Directory.CreateDirectory(outputDirForFile);
 
-                    string outputFileName = Path.ChangeExtension(Path.GetFileName(relativePath), ".uncompressed.ab");
+                    string outputFileName = Path.ChangeExtension(Path.GetFileName(relativePath), ".ab");
                     string outputPath = Path.Combine(outputDirForFile, outputFileName);
 
                     converter.ConvertToUncompressed(inputFile.FullName, outputPath);
