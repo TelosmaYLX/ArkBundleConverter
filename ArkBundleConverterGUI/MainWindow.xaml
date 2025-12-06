@@ -45,7 +45,7 @@
         <Geometry x:Key="IconClose">M 1,1 L 9,9 M 9,1 L 1,9</Geometry>
         <Geometry x:Key="IconResize">M 8,0 L 8,8 M 4,4 L 8,8 M 0,8 L 8,8</Geometry>
 
-        <!-- 窗体控制按钮基础样式 -->
+        <!-- 突出显示 鼠标悬停和按动效果 -->
         <Style x:Key="ChromeButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#FF64748B"/>
@@ -162,6 +162,29 @@
             </Setter>
         </Style>
 
+        <!-- 文本风格的按钮（类似链接，只有文字） -->
+        <Style x:Key="LinkButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.85"/>
+                    <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <DropShadowEffect x:Key="WindowShadow" Color="Black" BlurRadius="12" ShadowDepth="4" Opacity="0.15"/>
     </Window.Resources>
 
@@ -243,9 +266,11 @@
                     <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Margin="10,20,0,0">
                         <Button x:Name="btnSelectOutputDir" Content="选择目录" Style="{StaticResource OutlineButton}" Click="BtnSelectOutputDir_Click" Margin="0,0,6,0"/>
                         <Button x:Name="btnOpenOutput" Content="打开目录" Style="{StaticResource OutlineButton}" Click="BtnOpenOutput_Click"/>
+                        <!-- 原来的导出日志按钮已移除，放到开始按钮右侧 -->
                     </StackPanel>
 
                     <!-- Start Button -->
+                    <!-- Start Button and Export Log placed together to align Export Log to the right of Start -->
                     <Button x:Name="btnStart" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" 
                             Content="开始转换" Height="44" FontSize="16" Margin="150,24,150,0"
                             Style="{StaticResource PrimaryButtonStyle}" Click="BtnStart_Click"/>
@@ -256,12 +281,20 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Text="执行日志" FontSize="12" Foreground="#94A3B8" Margin="0,0,0,6"/>
-                        <TextBox x:Name="txtLog" Grid.Row="1" 
-                                 FontFamily="Consolas" FontSize="13"
-                                 Background="#F8FAFC" BorderThickness="1" BorderBrush="#E2E8F0"
-                                 Padding="8"
-                                 IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
+                        <Grid Grid.Row="0" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="执行日志" FontSize="12" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                            <!-- 文本类型的导出按钮，位于日志标题同一行的最右侧，样式为仅显示文字 -->
+                            <Button x:Name="btnExportLog" Grid.Column="1" Content="导出日志" Style="{StaticResource LinkButtonStyle}" Click="BtnExportLog_Click"/>
+                        </Grid>
+                         <TextBox x:Name="txtLog" Grid.Row="1" 
+                                  FontFamily="Consolas" FontSize="13"
+                                  Background="#F8FAFC" BorderThickness="1" BorderBrush="#E2E8F0"
+                                  Padding="8"
+                                  IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
                     </Grid>
                 </Grid>
 

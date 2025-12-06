@@ -1,5 +1,6 @@
 ﻿using Microsoft.Win32; // For OpenFileDialog
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics; // For Process
 using System.IO;
@@ -9,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Threading;
 // Required if using System.Windows.Forms.FolderBrowserDialog
 using Forms = System.Windows.Forms;
 
@@ -25,13 +27,64 @@ namespace ArkBundleConverterGUI_WPF
         // Adjust this path as needed, or add logic to find it
         private string _cliExecutablePath = "ArkBundleConverterCLI.exe";
 
+        // New: queue and timer for batching UI log updates
+        private readonly ConcurrentQueue<string> _logQueue = new ConcurrentQueue<string>();
+        private readonly DispatcherTimer _logFlushTimer;
+        private const int _maxBatchLines = 1000; // maximum lines to flush per tick
+        private const int _logTrimLimit = 200_000; // maximum characters to keep in log TextBox
+
+        // New: tracking failures for export
+        private readonly List<(string FileName, string ResourceName, string Reason)> _failedFiles = new List<(string, string, string)>();
+        private int _totalFiles = 0;
+        private int _successFiles = 0;
+        private int _failedFilesCount = 0;
+
         public MainWindow()
         {
             InitializeComponent();
             LocateCliExecutable(); // Try to find the CLI tool
             UpdateInputDisplay();
+
+            // Initialize and start timer to flush logs to UI at a controlled rate
+            _logFlushTimer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromMilliseconds(200)
+            };
+            _logFlushTimer.Tick += LogFlushTimer_Tick;
+            _logFlushTimer.Start();
         }
 
+        private void LogFlushTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_logQueue.IsEmpty) return;
+
+            var sb = new StringBuilder();
+            int lines = 0;
+
+            while (lines < _maxBatchLines && _logQueue.TryDequeue(out var line))
+            {
+                sb.AppendLine(line);
+                // Also update progress if the line contains progress info
+                UpdateProgressFromLog(line);
+                lines++;
+            }
+
+            if (sb.Length > 0)
+            {
+                // Append once and scroll once to avoid per-line UI work
+                txtLog.AppendText(sb.ToString());
+                txtLog.ScrollToEnd();
+
+                // Optionally trim the log if it grows too big to avoid memory/GC pressure
+                if (txtLog.Text.Length > _logTrimLimit)
+                {
+                    // Keep only the last half
+                    int startIndex = txtLog.Text.Length - (_logTrimLimit / 2);
+                    txtLog.Text = txtLog.Text.Substring(startIndex);
+                    txtLog.CaretIndex = txtLog.Text.Length;
+                }
+            }
+        }
 
         private void LocateCliExecutable()
         {
@@ -42,13 +95,13 @@ namespace ArkBundleConverterGUI_WPF
                 if (File.Exists(potentialPath))
                 {
                     _cliExecutablePath = potentialPath;
-                    LogMessage($"找到转换程序: {_cliExecutablePath}");
+                    EnqueueLogMessage($"找到转换程序: {_cliExecutablePath}");
                     SetUIEnabled(true); // Enable UI if found
                 }
                 else
                 {
                     string errorMsg = $"未能在 '{baseDir}' 找到转换程序 '{_cliExecutablePath}'。\n请确保它与 GUI 程序在同一目录，或手动修改路径。";
-                    LogMessage(errorMsg, true);
+                    EnqueueLogMessage(errorMsg, true);
                     System.Windows.MessageBox.Show(errorMsg, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                     SetUIEnabled(false); // Disable UI controls if not found
                     btnStart.IsEnabled = false;
@@ -57,7 +110,7 @@ namespace ArkBundleConverterGUI_WPF
             else
             {
                 string errorMsg = $"无法确定应用程序基目录，无法定位 '{_cliExecutablePath}'。";
-                LogMessage(errorMsg, true);
+                EnqueueLogMessage(errorMsg, true);
                 System.Windows.MessageBox.Show(errorMsg, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                 SetUIEnabled(false);
                 btnStart.IsEnabled = false;
@@ -150,6 +203,12 @@ namespace ArkBundleConverterGUI_WPF
                 return;
             }
 
+            // Reset tracking info
+            _failedFiles.Clear();
+            _totalFiles = 0;
+            _successFiles = 0;
+            _failedFilesCount = 0;
+
             // Determine subcommand to run. Default to 'uncompress'.
             // If you add UI to choose mode, replace this with selected mode.
             string selectedSubcommand = "uncompress";
@@ -174,14 +233,17 @@ namespace ArkBundleConverterGUI_WPF
             argsBuilder.Append($"--output-dir \"{_selectedOutputDir}\"");
 
             // Prepare UI and start process
-            txtLog.Clear();
-            progressBar.Value = 0;
-            txtProgress.Text = "0/0 (0%)";
-            // Only disable the Start button to allow user to change selections during conversion
-            btnStart.IsEnabled = false;
-            btnOpenOutput.IsEnabled = false;
-            LogMessage("开始执行转换...");
-            LogMessage($"命令行: {_cliExecutablePath} {argsBuilder.ToString()}");
+            // Clear log safely on UI thread
+            Dispatcher.Invoke(() => {
+                txtLog.Clear();
+                progressBar.Value = 0;
+                txtProgress.Text = "0/0 (0%)";
+                // Only disable the Start button to allow user to change selections during conversion
+                btnStart.IsEnabled = false;
+                btnOpenOutput.IsEnabled = false;
+                LogMessage("开始执行转换...");
+                LogMessage($"命令行: {_cliExecutablePath} {argsBuilder.ToString()}");
+            });
 
             // Run process asynchronously
             Task.Run(() => ExecuteCliProcess(argsBuilder.ToString()));
@@ -210,6 +272,66 @@ namespace ArkBundleConverterGUI_WPF
             }
         }
 
+        // New: Export log and failures
+        private void BtnExportLog_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dlg = new Microsoft.Win32.SaveFileDialog()
+                {
+                    FileName = "arkbundle_log",
+                    DefaultExt = ".txt",
+                    Filter = "Text documents (*.txt)|*.txt|All files (*.*)|*.*"
+                };
+
+                bool? result = dlg.ShowDialog(this);
+                if (result != true)
+                    return;
+
+                // Ensure we capture the full content of the log TextBox
+                string allText = string.Empty;
+                // If txtLog exists, prefer its Text. This returns the entire content irrespective of scroll/selection.
+                if (txtLog != null)
+                {
+                    allText = txtLog.Text ?? string.Empty;
+                }
+
+                // Fallback: if there's any internal buffer field called _log or logBuilder, try to use it via reflection
+                if (string.IsNullOrEmpty(allText))
+                {
+                    // Try common field names
+                    var fieldNames = new[] { "_log", "logBuilder", "_logBuilder", "Log" };
+                    foreach (var name in fieldNames)
+                    {
+                        var f = this.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (f != null)
+                        {
+                            var val = f.GetValue(this);
+                            if (val is StringBuilder sb)
+                            {
+                                allText = sb.ToString();
+                                break;
+                            }
+                            if (val is string s)
+                            {
+                                allText = s;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Write to file using UTF8
+                File.WriteAllText(dlg.FileName, allText, Encoding.UTF8);
+
+                System.Windows.MessageBox.Show(this, "日志已导出: " + dlg.FileName, "导出成功", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(this, "导出日志失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void ExecuteCliProcess(string arguments)
         {
             ProcessStartInfo startInfo = new ProcessStartInfo
@@ -232,18 +354,20 @@ namespace ArkBundleConverterGUI_WPF
                     {
                         if (args.Data != null)
                         {
-                            Dispatcher.InvokeAsync(() =>
-                            {
-                                LogMessage(args.Data);
-                                UpdateProgressFromLog(args.Data);
-                            });
+                            // Enqueue raw log lines; flush timer running on UI thread will batch updates
+                            _logQueue.Enqueue(args.Data);
+
+                            // Try to parse progress and failure messages immediately on background thread
+                            // Pattern for failure assumed: "处理文件 'name' 时发生错误: ..." 或类似
+                            ParseCliLineForFailures(args.Data);
                         }
                     };
                     process.ErrorDataReceived += (s, args) =>
                     {
                         if (args.Data != null)
                         {
-                            Dispatcher.InvokeAsync(() => LogMessage($"错误: {args.Data}", true));
+                            _logQueue.Enqueue($"[错误] {args.Data}");
+                            ParseCliLineForFailures(args.Data);
                         }
                     };
 
@@ -258,19 +382,48 @@ namespace ArkBundleConverterGUI_WPF
                     {
                         // 恢复 Start 按钮，允许重复转换
                         btnStart.IsEnabled = true;
-                        // Enable OpenOutput only if output dir exists and conversion succeeded
-                        bool enableOpen = false;
-                        try
-                        {
-                            enableOpen = process.ExitCode == 0 && !string.IsNullOrEmpty(_selectedOutputDir) && Directory.Exists(_selectedOutputDir);
-                        }
-                        catch { enableOpen = false; }
-                        btnOpenOutput.IsEnabled = enableOpen;
+                        // 恢复为之前的行为：始终允许点击“打开目录”按钮（与之前逻辑一致）
+                        btnOpenOutput.IsEnabled = true;
 
-                        // Ensure selection buttons remain enabled so user can change selection
+                        // 确保选择按钮保持启用，以便用户可以更改选择
                         btnSelectFiles.IsEnabled = true;
                         btnSelectInputDir.IsEnabled = true;
                         btnSelectOutputDir.IsEnabled = true;
+
+                        // Flush any remaining queued lines immediately
+                        LogFlushTimer_Tick(null, EventArgs.Empty);
+
+                        // After flush, append a detailed summary including failed file list
+                        var summarySb = new StringBuilder();
+                        summarySb.AppendLine();
+                        summarySb.AppendLine($"转换完成: 总文件 {_totalFiles}, 成功 {_successFiles}, 失败 {_failedFilesCount}");
+                        if (_failedFilesCount > 0)
+                        {
+                            summarySb.AppendLine();
+                            summarySb.AppendLine("失败文件列表:");
+                            lock (_failedFiles)
+                            {
+                                int idx = 1;
+                                foreach (var f in _failedFiles)
+                                {
+                                    var fileLine = new StringBuilder();
+                                    fileLine.AppendFormat("{0}. {1}", idx, string.IsNullOrEmpty(f.FileName) ? "(unknown)" : f.FileName);
+                                    if (!string.IsNullOrEmpty(f.ResourceName) && f.ResourceName != "(unknown)")
+                                    {
+                                        fileLine.AppendFormat("  资源: {0}", f.ResourceName);
+                                    }
+                                    if (!string.IsNullOrEmpty(f.Reason))
+                                    {
+                                        fileLine.AppendFormat("  原因: {0}", f.Reason);
+                                    }
+                                    summarySb.AppendLine(fileLine.ToString());
+                                    idx++;
+                                }
+                            }
+                        }
+
+                        txtLog.AppendText(summarySb.ToString());
+                        txtLog.ScrollToEnd();
                     });
                 }
             }
@@ -278,7 +431,7 @@ namespace ArkBundleConverterGUI_WPF
             {
                 Dispatcher.Invoke(() =>
                 {
-                    LogMessage($"启动或执行转换进程时出错: {ex.Message}", true);
+                    EnqueueLogMessage($"启动或执行转换进程时出错: {ex.Message}", true);
                     // 发生错误时也允许重试
                     btnStart.IsEnabled = true;
                     btnSelectFiles.IsEnabled = true;
@@ -286,6 +439,65 @@ namespace ArkBundleConverterGUI_WPF
                     btnSelectOutputDir.IsEnabled = true;
                     btnOpenOutput.IsEnabled = false;
                 });
+            }
+        }
+
+        private void ParseCliLineForFailures(string line)
+        {
+            // Try to extract failure information from CLI output lines.
+            // This is heuristic and depends on CLI wording used in Program.cs.
+            // Examples to handle:
+            //  - "处理文件 'name' 时发生错误: <reason>"
+            //  - "处理文件 'name' 时发生异常: <reason>"
+            //  - "✓ 成功转换: filename -> output"
+
+            try
+            {
+                if (line.Contains("进度:"))
+                {
+                    // Progress line, update totals
+                    var match = System.Text.RegularExpressions.Regex.Match(line, @"进度:\s*(\d+)/(\d+)\s*\((\d+)%\)");
+                    if (match.Success)
+                    {
+                        if (int.TryParse(match.Groups[1].Value, out int current) &&
+                            int.TryParse(match.Groups[2].Value, out int total))
+                        {
+                            // update total only if it's larger
+                            _totalFiles = Math.Max(_totalFiles, total);
+                        }
+                    }
+                }
+
+                if (line.Contains("成功转换"))
+                {
+                    // increment success count
+                    System.Threading.Interlocked.Increment(ref _successFiles);
+                }
+
+                if (line.Contains("发生错误") || line.Contains("发生异常"))
+                {
+                    // crude parse: extract file name between single quotes if present
+                    string fileName = "(unknown)";
+                    string resourceName = "(unknown)";
+                    string reason = line;
+
+                    var m = System.Text.RegularExpressions.Regex.Match(line, @"文件\s*'(?<f>[^']+)'\s*时");
+                    if (m.Success) fileName = m.Groups["f"].Value;
+
+                    // Try extract reason after colon
+                    var idx = line.IndexOf(":");
+                    if (idx >= 0 && idx + 1 < line.Length) reason = line.Substring(idx + 1).Trim();
+
+                    lock (_failedFiles)
+                    {
+                        _failedFiles.Add((fileName, resourceName, reason));
+                        _failedFilesCount = _failedFiles.Count;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore parse errors
             }
         }
 
@@ -299,6 +511,7 @@ namespace ArkBundleConverterGUI_WPF
                     int.TryParse(match.Groups[2].Value, out int total) &&
                     int.TryParse(match.Groups[3].Value, out int percentage))
                 {
+                    // This method is run on UI thread by the flush timer
                     progressBar.Maximum = total;
                     progressBar.Value = current;
                     txtProgress.Text = $"{current}/{total} ({percentage}%)";
@@ -309,10 +522,17 @@ namespace ArkBundleConverterGUI_WPF
         // Log messages to the TextBox (must be called on UI thread or marshalled)
         private void LogMessage(string message, bool isError = false)
         {
-            // This method assumes it's already called on UI thread or marshalled via Dispatcher
+            // Keep legacy direct logging for immediate messages; uses UI thread
             string prefix = isError ? "[错误] " : "";
             txtLog.AppendText($"{prefix}{message}{Environment.NewLine}");
             txtLog.ScrollToEnd(); // Keep the last line visible
+        }
+
+        // Enqueue messages from non-UI threads
+        private void EnqueueLogMessage(string message, bool isError = false)
+        {
+            if (isError) message = "[错误] " + message;
+            _logQueue.Enqueue(message);
         }
 
         // Enable/Disable UI controls
