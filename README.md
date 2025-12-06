@@ -1,3 +1,6 @@
-将明日方舟修改过的assetBundle文件转换成普通LZ4压缩的ab包文件
+感谢@MigitaRin 大佬在https://www.bilibili.com/opus/1053485538509586453 中分享的工具和开源
+在舟引擎升级之后修改了assetBundle的压缩算法，具体可见https://www.bilibili.com/opus/1108601513797746721 这篇专栏的介绍。
+本工具可以将明日方舟游戏资源的assetBundle文件转换成普通LZ4压缩的ab包文件，以便进一步使用assetStudio和assetRipper读取
+优化的地方:优化了GUI的表现、可以批量处理输入目录下内和其子文件内的所有文件、处理大量文件时不会卡死了、增加了进度条和计数、改进了日志打印信息、增加了快速打开输出目录和打印日志的功能。
 <img width="908" height="909" alt="image" src="https://github.com/user-attachments/assets/5bfb04e1-4f75-4e00-900b-ee583f4d1f4d" />
-如有问题请b站私信我https://space.bilibili.com/94813478?spm_id_from=333.1387.0.0
+如有问题请b站私信我https://space.bilibili.com/948134
