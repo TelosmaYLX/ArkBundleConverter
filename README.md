@@ -6,4 +6,5 @@
 
 优化的地方:优化了GUI的表现、可以批量处理输入目录下内和其子文件内的所有文件、处理大量文件时不会卡死了、增加了进度条和计数、改进了日志打印信息、增加了快速打开输出目录和打印日志的功能。
 <img width="908" height="909" alt="image" src="https://github.com/user-attachments/assets/5bfb04e1-4f75-4e00-900b-ee583f4d1f4d" />
+
 如有问题请b站私信我https://space.bilibili.com/948134
