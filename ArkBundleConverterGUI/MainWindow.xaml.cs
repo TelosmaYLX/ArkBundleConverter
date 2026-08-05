@@ -26,6 +26,8 @@ namespace ArkBundleConverterGUI_WPF
         private string? _selectedOutputDir = null;
         // Adjust this path as needed, or add logic to find it
         private string _cliExecutablePath = "ArkBundleConverterCLI.exe";
+        // 当前正在执行的子命令，用于完成汇总的文案
+        private string _currentSubcommand = "uncompress";
 
         // New: queue and timer for batching UI log updates
         private readonly ConcurrentQueue<string> _logQueue = new ConcurrentQueue<string>();
@@ -186,6 +188,22 @@ namespace ArkBundleConverterGUI_WPF
 
         private void BtnStart_Click(object sender, RoutedEventArgs e)
         {
+            StartCliProcess("uncompress");
+        }
+
+        /// <summary>
+        /// 导出 AB 包文件名与资源名(CAB)的对应表，不进行包体转换
+        /// </summary>
+        private void BtnExportMap_Click(object sender, RoutedEventArgs e)
+        {
+            StartCliProcess("export-map");
+        }
+
+        /// <summary>
+        /// 校验输入后启动 CLI 进程执行指定子命令
+        /// </summary>
+        private void StartCliProcess(string subcommand)
+        {
             // Validation
             if (string.IsNullOrEmpty(_selectedInputDir) && _selectedInputFiles.Count == 0)
             {
@@ -208,14 +226,11 @@ namespace ArkBundleConverterGUI_WPF
             _totalFiles = 0;
             _successFiles = 0;
             _failedFilesCount = 0;
-
-            // Determine subcommand to run. Default to 'uncompress'.
-            // If you add UI to choose mode, replace this with selected mode.
-            string selectedSubcommand = "uncompress";
+            _currentSubcommand = subcommand;
 
             // Build arguments
             StringBuilder argsBuilder = new StringBuilder();
-            argsBuilder.Append(selectedSubcommand).Append(' ');
+            argsBuilder.Append(subcommand).Append(' ');
             if (_selectedInputDir != null)
             {
                 argsBuilder.Append($"--input-dir \"{_selectedInputDir}\" ");
@@ -240,8 +255,9 @@ namespace ArkBundleConverterGUI_WPF
                 txtProgress.Text = "0/0 (0%)";
                 // Only disable the Start button to allow user to change selections during conversion
                 btnStart.IsEnabled = false;
+                btnExportMap.IsEnabled = false;
                 btnOpenOutput.IsEnabled = false;
-                LogMessage("开始执行转换...");
+                LogMessage(_currentSubcommand == "export-map" ? "开始导出对应表（不进行包体转换）..." : "开始执行转换...");
                 LogMessage($"命令行: {_cliExecutablePath} {argsBuilder.ToString()}");
             });
 
@@ -382,6 +398,7 @@ namespace ArkBundleConverterGUI_WPF
                     {
                         // 恢复 Start 按钮，允许重复转换
                         btnStart.IsEnabled = true;
+                        btnExportMap.IsEnabled = true;
                         // 恢复为之前的行为：始终允许点击“打开目录”按钮（与之前逻辑一致）
                         btnOpenOutput.IsEnabled = true;
 
@@ -394,9 +411,10 @@ namespace ArkBundleConverterGUI_WPF
                         LogFlushTimer_Tick(null, EventArgs.Empty);
 
                         // After flush, append a detailed summary including failed file list
+                        string doneLabel = _currentSubcommand == "export-map" ? "对应表导出完成" : "转换完成";
                         var summarySb = new StringBuilder();
                         summarySb.AppendLine();
-                        summarySb.AppendLine($"转换完成: 总文件 {_totalFiles}, 成功 {_successFiles}, 失败 {_failedFilesCount}");
+                        summarySb.AppendLine($"{doneLabel}: 总文件 {_totalFiles}, 成功 {_successFiles}, 失败 {_failedFilesCount}");
                         if (_failedFilesCount > 0)
                         {
                             summarySb.AppendLine();
@@ -434,6 +452,7 @@ namespace ArkBundleConverterGUI_WPF
                     EnqueueLogMessage($"启动或执行转换进程时出错: {ex.Message}", true);
                     // 发生错误时也允许重试
                     btnStart.IsEnabled = true;
+                    btnExportMap.IsEnabled = true;
                     btnSelectFiles.IsEnabled = true;
                     btnSelectInputDir.IsEnabled = true;
                     btnSelectOutputDir.IsEnabled = true;
@@ -468,7 +487,7 @@ namespace ArkBundleConverterGUI_WPF
                     }
                 }
 
-                if (line.Contains("成功转换"))
+                if (line.Contains("成功转换") || line.Contains("成功处理"))
                 {
                     // increment success count
                     System.Threading.Interlocked.Increment(ref _successFiles);
@@ -542,6 +561,7 @@ namespace ArkBundleConverterGUI_WPF
             btnSelectInputDir.IsEnabled = enabled;
             btnSelectOutputDir.IsEnabled = enabled;
             btnStart.IsEnabled = enabled;
+            btnExportMap.IsEnabled = enabled;
         }
 
         private void txtInputPaths_TextChanged(object sender, TextChangedEventArgs e)

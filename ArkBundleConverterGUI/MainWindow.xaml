@@ -269,11 +269,13 @@
                         <!-- 原来的导出日志按钮已移除，放到开始按钮右侧 -->
                     </StackPanel>
 
-                    <!-- Start Button -->
-                    <!-- Start Button and Export Log placed together to align Export Log to the right of Start -->
-                    <Button x:Name="btnStart" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" 
-                            Content="开始转换" Height="44" FontSize="16" Margin="150,24,150,0"
-                            Style="{StaticResource PrimaryButtonStyle}" Click="BtnStart_Click"/>
+                    <!-- Start Button / Export Map Button -->
+                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,24,0,0">
+                        <Button x:Name="btnStart" Content="开始转换" Height="44" FontSize="16" MinWidth="150"
+                                Style="{StaticResource PrimaryButtonStyle}" Click="BtnStart_Click"/>
+                        <Button x:Name="btnExportMap" Content="导出对应表" Height="44" FontSize="16" MinWidth="150" Margin="16,0,0,0"
+                                Style="{StaticResource OutlineButton}" Click="BtnExportMap_Click"/>
+                    </StackPanel>
 
                     <!-- Log Section -->
                     <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,20,0,0">

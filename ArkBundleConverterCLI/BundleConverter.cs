@@ -666,8 +666,30 @@ public class BundleConverter
 
     public class BundleMetadata
     {
+        /// <summary>包内第一个 CAB 资源名，用于兼容现有逻辑显示。</summary>
         public string ResourceName { get; set; } = string.Empty;
+        /// <summary>包内全部 CAB 资源名（去重，保持出现顺序）。</summary>
+        public List<string> Cabs { get; set; } = new();
         public List<string> Dependencies { get; set; } = new();
+    }
+
+    /// <summary>
+    /// 快速判断文件是否为 UnityFS Bundle（仅读取文件头签名，不做任何转换）。
+    /// </summary>
+    public static bool IsUnityBundle(string inputPath)
+    {
+        const string signature = "UnityFS"; // 7 个字符
+        try
+        {
+            using var fs = File.OpenRead(inputPath);
+            Span<byte> sig = stackalloc byte[signature.Length];
+            int read = fs.Read(sig);
+            return read == signature.Length && Encoding.ASCII.GetString(sig) == signature;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public BundleMetadata ExtractBundleMetadata(string inputPath)
@@ -754,13 +776,21 @@ public class BundleConverter
                         blocksInfoReader.ReadUInt32(); // flags
                         string path = blocksInfoReader.ReadStringToNull();
                         
-                        // Extract CAB name from path (e.g., "CAB-12345678abc")
-                        if (path.Contains("CAB-") && string.IsNullOrEmpty(metadata.ResourceName))
+                        // Extract CAB name(s) from path (e.g., "CAB-12345678abc")
+                        if (path.Contains("CAB-"))
                         {
                             var cabMatch = System.Text.RegularExpressions.Regex.Match(path, @"CAB-[A-Fa-f0-9]+");
                             if (cabMatch.Success)
                             {
-                                metadata.ResourceName = cabMatch.Value;
+                                string cab = cabMatch.Value;
+                                if (!metadata.Cabs.Contains(cab))
+                                {
+                                    metadata.Cabs.Add(cab);
+                                }
+                                if (string.IsNullOrEmpty(metadata.ResourceName))
+                                {
+                                    metadata.ResourceName = cab;
+                                }
                             }
                         }
                         
